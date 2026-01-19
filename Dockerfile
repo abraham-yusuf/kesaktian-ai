@@ -2,11 +2,12 @@
 FROM php:8.2-cli
 
 # 1. Install Library Sistem (Wajib untuk ekstensi PHP)
-# libzip-dev -> untuk ekstensi Zip
-# libonig-dev -> untuk ekstensi Mbstring
-# libpng-dev & libjpeg-dev -> untuk ekstensi GD (Gambar)
-# libcurl4-openssl-dev -> untuk cURL
-# libxml2-dev -> untuk XML/DOM
+# - libzip-dev         : untuk zip
+# - libonig-dev        : untuk mbstring
+# - libpng/jpeg/freetype : untuk GD (gambar)
+# - libcurl4-openssl-dev : untuk cURL
+# - libxml2-dev        : untuk XML/DOM
+# - libicu-dev         : <--- INI YANG KURANG TADI (Untuk intl)
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -18,22 +19,17 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     libfreetype6-dev \
     libcurl4-openssl-dev \
-    libxml2-dev
+    libxml2-dev \
+    libicu-dev
 
-# 2. Bersihkan cache (Biar ringan)
+# 2. Bersihkan cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 3. Install Ekstensi PHP yang Diminta
-# - pdo_mysql : Untuk database (MariaDB/TiDB)
-# - mbstring  : Untuk manipulasi string
-# - zip       : Wajib untuk Composer & Update
-# - exif      : Sering dipakai library gambar
-# - pcntl     : Untuk queue worker
-# - bcmath    : Untuk hitungan presisi (kripto/uang)
-# - gd        : Untuk manipulasi gambar (Avatar/Thumbnail)
-# - intl      : Untuk format mata uang/tanggal
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) \
+# 3. Konfigurasi GD (Wajib di-configure dulu sebelum install)
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg
+
+# 4. Install Ekstensi PHP
+RUN docker-php-ext-install -j$(nproc) \
     pdo_mysql \
     mbstring \
     zip \
@@ -48,26 +44,23 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     fileinfo \
     xml
 
-# (Catatan: Ctype, Filter, Hash, OpenSSL, PCRE, PDO, Session, Tokenizer 
-#  sudah otomatis TERBAWA di dalam core PHP 8.2 image, jadi aman!)
-
-# 4. Install Composer
+# 5. Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# 5. Set folder kerja
+# 6. Set folder kerja
 WORKDIR /var/www
 
-# 6. Salin file project
+# 7. Salin file project
 COPY . .
 
-# 7. Install dependency via Composer
+# 8. Install dependency via Composer
 RUN composer install --no-dev --optimize-autoloader
 
-# 8. Buat file dummy 'installed' (Bypass lisensi)
+# 9. Buat file dummy 'installed' (Bypass lisensi)
 RUN touch storage/installed
 
-# 9. Expose Port
+# 10. Expose Port
 EXPOSE 8080
 
-# 10. Jalankan Aplikasi
+# 11. Jalankan Aplikasi
 CMD php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8080
